@@ -1,97 +1,184 @@
-// Welcome to
-// __________         __    __  .__                               __
-// \______   \_____ _/  |__/  |_|  |   ____   ______ ____ _____  |  | __ ____
-//  |    |  _/\__  \\   __\   __\  | _/ __ \ /  ___//    \\__  \ |  |/ // __ \
-//  |    |   \ / __ \|  |  |  | |  |_\  ___/ \___ \|   |  \/ __ \|    <\  ___/
-//  |________/(______/__|  |__| |____/\_____>______>___|__(______/__|__\\_____>
-//
-// This file can be a nice home for your Battlesnake logic and helper functions.
-//
-// To get you started we've included code to prevent your Battlesnake from moving backwards.
-// For more info see docs.battlesnake.com
-
 import runServer from './server';
-import { GameState, InfoResponse, MoveResponse } from './types';
+import { Battlesnake, Coord, GameState, InfoResponse, MoveResponse } from './types';
 
-// info is called when you create your Battlesnake on play.battlesnake.com
-// and controls your Battlesnake's appearance
-// TIP: If you open your Battlesnake URL in a browser you should see this data
 function info(): InfoResponse {
   console.log("INFO");
 
   return {
     apiversion: "1",
-    author: "",       // TODO: Your Battlesnake Username
-    color: "#888888", // TODO: Choose color
-    head: "default",  // TODO: Choose head
-    tail: "default",  // TODO: Choose tail
+    author: "",
+    color: "#2cb5b5",
+    head: "bonhomme",
+    tail: "bonhomme",
   };
 }
 
-// start is called when your Battlesnake begins a game
-function start(gameState: GameState): void {
+function start(game_state: GameState): void {
   console.log("GAME START");
 }
 
 // end is called when your Battlesnake finishes a game
-function end(gameState: GameState): void {
+function end(game_state: GameState): void {
   console.log("GAME OVER\n");
 }
 
-// move is called on every turn and returns your next move
-// Valid moves are "up", "down", "left", or "right"
-// See https://docs.battlesnake.com/api/example-move for available data
-function move(gameState: GameState): MoveResponse {
+enum EDirections {
+  UP = 'up',
+  DOWN = 'down',
+  LEFT = 'left',
+  RIGHT = 'right'
+}
 
-  let isMoveSafe: { [key: string]: boolean; } = {
-    up: true,
-    down: true,
-    left: true,
-    right: true
-  };
+const DIRECTIONS_DATA = new Map<EDirections, Coord>([
+  [EDirections.UP, { x: 0, y: 1 }],
+  [EDirections.DOWN, { x: 0, y: -1 }],
+  [EDirections.LEFT, { x: -1, y: 0 }],
+  [EDirections.RIGHT, { x: 1, y: 0 }]
+]);
 
-  // We've included code to prevent your Battlesnake from moving backwards
-  const myHead = gameState.you.body[0];
-  const myNeck = gameState.you.body[1];
+// enum EPossibleGridValue {
+//   EMPTY,
+//   SNAKE_HEAD,
+//   SNAKE_BODY
+// }
 
-  if (myNeck.x < myHead.x) {        // Neck is left of head, don't move left
-    isMoveSafe.left = false;
-
-  } else if (myNeck.x > myHead.x) { // Neck is right of head, don't move right
-    isMoveSafe.right = false;
-
-  } else if (myNeck.y < myHead.y) { // Neck is below head, don't move down
-    isMoveSafe.down = false;
-
-  } else if (myNeck.y > myHead.y) { // Neck is above head, don't move up
-    isMoveSafe.up = false;
+function getBoardMatrix(data: { height: number, width: number, snakes: Array<Battlesnake>, food: Coord[] }): Array<Array<{ snake_id: number, body_position: number } | 0>> {
+  console.log("\n**************");
+  const matrix: Array<Array<{ snake_id: number, body_position: number } | 0>> = Array.from(Array(data.width), () => new Array(data.height).fill(0));
+  for (const [snake_id, snake] of data.snakes.entries()) {
+    for (const [position, snake_part] of snake.body.entries()) {
+      matrix[snake_part.x][snake_part.y] = { snake_id: snake_id, body_position: position + 1 };
+    }
   }
+  // console.log("matrix", matrix);
+  return matrix;
+}
 
-  // TODO: Step 1 - Prevent your Battlesnake from moving out of bounds
-  // boardWidth = gameState.board.width;
-  // boardHeight = gameState.board.height;
+function getNerbyFoodCoord(game_data: GameState): false | Coord {
+  const my_head = game_data.you.head;
+  let nerby_food_coord: false | Coord = false;
+  let nerby_food_distance = game_data.board.width + game_data.board.height;
+  for (const food_coord of game_data.board.food) {
+    const distance_x = Math.abs(food_coord.x - my_head.x);
+    const distance_y = Math.abs(food_coord.y - my_head.y);
+    if (nerby_food_distance > distance_x + distance_y) {
+      nerby_food_distance = distance_x + distance_y;
+      nerby_food_coord = food_coord;
+      if (nerby_food_distance <= 1) {
+        break;
+      }
+    }
+  }
+  return nerby_food_coord;
+}
 
-  // TODO: Step 2 - Prevent your Battlesnake from colliding with itself
-  // myBody = gameState.you.body;
+function sumarCoords(coord_a: Coord, coord_b: Coord): Coord {
+  return {
+    x: coord_a.x + coord_b.x,
+    y: coord_a.y + coord_b.y
+  }
+}
 
-  // TODO: Step 3 - Prevent your Battlesnake from colliding with other Battlesnakes
-  // opponents = gameState.board.snakes;
+function isSafeLocation(matrix: Array<Array<{ snake_id: number, body_position: number } | 0>>, coord: Coord): boolean {
+  const col_values = matrix[coord.x];
+  if (!col_values) {
+    return false;
+  }
+  const value = col_values[coord.y];
+  if (value == undefined) {
+    return false;
+  }
+  return value == 0;
+  //TODO add more validations here
+  // - Add validation for next turn stuck
+}
 
-  // Are there any safe moves left?
-  const safeMoves = Object.keys(isMoveSafe).filter(key => isMoveSafe[key]);
-  if (safeMoves.length == 0) {
-    console.log(`MOVE ${gameState.turn}: No safe moves detected! Moving down`);
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getSafeDirections(matrix: Array<Array<{ snake_id: number, body_position: number } | 0>>, my_head: Coord, nerby_food_coord: false | Coord): Array<EDirections> {
+  const safe_positions = new Map<EDirections, boolean>([
+    [EDirections.UP, false],
+    [EDirections.DOWN, false],
+    [EDirections.LEFT, false],
+    [EDirections.RIGHT, false]
+  ]);
+
+  if (!nerby_food_coord) {
+    for (const [direction, direction_coord] of DIRECTIONS_DATA) {
+      const new_coord = sumarCoords(my_head, direction_coord);
+      if (!isSafeLocation(matrix, new_coord)) {
+        safe_positions.delete(direction);
+      }
+    }
+    return Array.from(safe_positions.keys());
+  }
+  
+  const intended_direction: Coord = {
+    x: clamp(nerby_food_coord.x - my_head.x, -1, 1),
+    y: clamp(nerby_food_coord.y - my_head.y, -1, 1)
+  };
+  for (const [direction, direction_coord] of DIRECTIONS_DATA) {
+    const new_coord = sumarCoords(my_head, direction_coord);
+    if (!isSafeLocation(matrix, new_coord)) {
+      safe_positions.delete(direction);
+      continue;
+    }
+    safe_positions.set(direction, getMovementPriority(intended_direction, direction_coord));
+  }
+  const final_result = Array.from(safe_positions.entries()).map(([direction, priority], index) => {
+    if (priority) {
+      return direction;
+    }
+    return false;
+  }).filter(element => element) as Array<EDirections>;
+  return final_result.length > 0 ? final_result : Array.from(safe_positions.keys());
+}
+
+function getMovementPriority(intended_direction: Coord, direction_coord: Coord): boolean {
+  const already_in_col = intended_direction.x == 0;
+  const already_in_row = intended_direction.y == 0;
+
+  if (already_in_col && direction_coord.x != 0) {
+    return false;
+  }
+  if (already_in_row && direction_coord.y != 0) {
+    return false;
+  }
+  if (!already_in_col && direction_coord.x != 0) {
+    return intended_direction.x - direction_coord.x == 0;
+  }
+  if (!already_in_row && direction_coord.y != 0) {
+    return intended_direction.y - direction_coord.y == 0
+  }
+  return true;
+}
+
+function getAllValidMovements(game_data: GameState, matrix: Array<Array<{ snake_id: number, body_position: number } | 0>>): Array<EDirections> {
+  const nerby_food_coord = getNerbyFoodCoord(game_data);
+  const my_head = game_data.you.head;
+  const safe_positions = getSafeDirections(matrix, my_head, nerby_food_coord);
+  return safe_positions;
+}
+
+function move(game_data: GameState): MoveResponse {
+  const game_matrix = getBoardMatrix({
+    height: game_data.board.height,
+    width: game_data.board.width,
+    snakes: game_data.board.snakes,
+    food: game_data.board.food
+  });
+
+  const safe_movements = getAllValidMovements(game_data, game_matrix);
+
+  if (safe_movements.length == 0) {
+    console.log(`MOVE ${game_data.turn}: No safe moves detected! Moving down`);
     return { move: "down" };
   }
-
-  // Choose a random move from the safe moves
-  const nextMove = safeMoves[Math.floor(Math.random() * safeMoves.length)];
-
-  // TODO: Step 4 - Move towards food instead of random, to regain health and survive longer
-  // food = gameState.board.food;
-
-  console.log(`MOVE ${gameState.turn}: ${nextMove}`)
-  return { move: nextMove };
+  const next_move = Array.from(safe_movements)[Math.floor(Math.random() * safe_movements.length)];
+  console.log(`MOVE ${game_data.turn}: ${next_move}`)
+  return { move: next_move };
 }
 
 runServer({
